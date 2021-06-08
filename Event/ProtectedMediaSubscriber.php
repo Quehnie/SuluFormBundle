@@ -116,12 +116,14 @@ class ProtectedMediaSubscriber implements EventSubscriberInterface
         }
 
         $url = $this->urlGenerator->generate(
-            'sulu_media.website.media.download_admin',
+            'sulu_media.website.media.download',
             \array_merge(
                 $request->query->all(),
                 $request->attributes->get('_route_params')
             )
         );
+
+        $url = '/admin' . $url;
 
         $event->setResponse(new RedirectResponse($url));
     }
