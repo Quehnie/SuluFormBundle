@@ -12,11 +12,12 @@
 namespace Sulu\Bundle\FormBundle\Event;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\NoResultException;
 use Sulu\Bundle\MediaBundle\Entity\MediaInterface;
 use Sulu\Bundle\MediaBundle\Media\FormatCache\FormatCacheInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Component\HttpKernel\Event\GetResponseEvent;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
@@ -55,8 +56,7 @@ class ProtectedMediaSubscriber implements EventSubscriberInterface
         array $protectedCollectionKeys = [
             'sulu_form',
         ]
-    )
-    {
+    ) {
         $this->urlGenerator = $urlGenerator;
         $this->entityManager = $entityManager;
         $this->formatCache = $formatCache;
@@ -73,7 +73,7 @@ class ProtectedMediaSubscriber implements EventSubscriberInterface
         ];
     }
 
-    public function onRequest(RequestEvent $event): void
+    public function onRequest(GetResponseEvent $event): void
     {
         if (!$event->isMasterRequest()) {
             return;
@@ -83,10 +83,17 @@ class ProtectedMediaSubscriber implements EventSubscriberInterface
 
         $routeName = $request->attributes->get('_route');
 
+        if ('sulu_media.website.image.proxy' !== $routeName
+            && 'sulu_media.website.media.download' !== $routeName
+        ) {
+            return;
+        }
+
         $mediaId = null;
 
         if ('sulu_media.website.image.proxy' === $routeName) {
             $slug = $request->attributes->get('slug');
+
             if (!$slug) {
                 return;
             }
@@ -128,7 +135,11 @@ class ProtectedMediaSubscriber implements EventSubscriberInterface
             ->where('media.id = :id')
             ->setParameter('id', $mediaId);
 
-        $collectionKey = $queryBuilder->getQuery()->getSingleScalarResult();
+        try {
+            $collectionKey = $queryBuilder->getQuery()->getSingleScalarResult();
+        } catch (NoResultException $e) {
+            return false;
+        }
 
         foreach ($this->protectedCollectionKeys as $protectedCollectionKey) {
             if (0 === \strpos($collectionKey, $protectedCollectionKey)) {
